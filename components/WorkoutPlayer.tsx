@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../store';
@@ -5,26 +6,33 @@ import { useTimer } from '../hooks/useTimer';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { playSound } from '../utils/sound';
 import { triggerHaptic } from '../utils/haptics';
-import { ChevronLeft, Info, SkipForward, Play, Pause, Star, CheckCircle, Home } from 'lucide-react';
+import { ChevronLeft, Info, Pause, CheckCircle, Flame, Star } from 'lucide-react';
 import clsx from 'clsx';
+import { WorkoutSession } from '../types';
 
 export const WorkoutPlayer: React.FC = () => {
   const { workoutId } = useParams();
   const navigate = useNavigate();
-  const { workouts, exercises, addSession } = useAppStore();
+  const { workouts, exercises, currentUser, addSession } = useAppStore();
   const { requestWakeLock, releaseWakeLock } = useWakeLock();
 
   const workout = workouts.find(w => w.id === workoutId);
   const [currentExerciseIdx, setCurrentExerciseIdx] = useState(0);
   const [currentSet, setCurrentSet] = useState(1);
-  const [phase, setPhase] = useState<'intro' | 'active' | 'rest' | 'finished'>('active');
-  const [startTime] = useState(new Date());
+  const [phase, setPhase] = useState<'active' | 'rest' | 'finished'>('active');
   const [rating, setRating] = useState(0);
+  const [sessionData] = useState<Omit<WorkoutSession, 'completedAt' | 'status'>>({
+    id: Math.random().toString(36).substr(2, 9),
+    workoutId: workoutId || '',
+    studentId: currentUser?.id || '',
+    startedAt: new Date().toISOString(),
+    exercisesCompleted: []
+  });
   
   const currentWorkoutExercise = workout?.exercises[currentExerciseIdx];
   const currentExerciseDetail = exercises.find(e => e.id === currentWorkoutExercise?.exerciseId);
   
-  const { timeLeft, isRunning, startTimer, pauseTimer, stopTimer } = useTimer(0, () => {
+  const { timeLeft, startTimer, stopTimer } = useTimer(0, () => {
     playSound('end');
     triggerHaptic('success');
     if (phase === 'rest') {
@@ -64,14 +72,20 @@ export const WorkoutPlayer: React.FC = () => {
        setPhase('rest');
        startTimer(workout.exercises[nextIdx].restSeconds);
      } else {
-       handleFinishWorkout();
+       finalizeSession();
      }
   };
 
-  const handleFinishWorkout = () => {
+  const finalizeSession = () => {
     setPhase('finished');
     playSound('success');
-    // Here you would typically save the session to the store
+    
+    const completedSession: WorkoutSession = {
+        ...sessionData,
+        completedAt: new Date().toISOString(),
+        status: 'completed'
+    };
+    addSession(completedSession);
   };
 
   const skipRest = () => {
@@ -80,183 +94,142 @@ export const WorkoutPlayer: React.FC = () => {
         setPhase('active');
         setCurrentSet(s => s + 1);
     } else {
-        const nextIdx = currentExerciseIdx + 1;
-        if (nextIdx < (workout?.exercises.length || 0)) {
-            setCurrentExerciseIdx(nextIdx);
-            setCurrentSet(1);
-            setPhase('active');
-        } else {
-            handleFinishWorkout();
-        }
+        handleNextExercise();
     }
   };
 
-  const goToExerciseDetail = () => {
-    if (currentExerciseDetail) {
-      navigate(`/exercise/${currentExerciseDetail.id}`);
-    }
-  };
-
-  if (!workout || !currentExerciseDetail) return <div className="p-8">Loading workout...</div>;
+  if (!workout || !currentExerciseDetail) return null;
 
   if (phase === 'finished') {
-    const durationMin = Math.round((new Date().getTime() - startTime.getTime()) / 60000);
-    const calories = workout.calories || 200; // Mock calculation
-
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center p-8 relative overflow-hidden">
-        {/* Background confetti effect placeholder */}
-        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-50 to-purple-50 -z-10"></div>
-        
-        <div className="mt-12 mb-8">
-           <div className="w-28 h-28 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-green-200 animate-bounce">
-             <CheckCircle size={48} className="text-white" />
+      <div className="min-h-screen bg-white flex flex-col items-center px-8 py-12 animate-in zoom-in duration-500">
+        <div className="w-full flex-1 flex flex-col items-center justify-center space-y-8">
+           <div className="w-32 h-32 bg-green-500 rounded-full flex items-center justify-center shadow-2xl shadow-green-200 animate-bounce">
+             <CheckCircle size={64} className="text-white" />
            </div>
-           <h1 className="text-3xl font-bold text-gray-900 text-center mb-2">Workout Completed!</h1>
-           <p className="text-gray-500 text-center">You crushed {workout.name}</p>
-        </div>
-
-        <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-xl shadow-gray-100 mb-8 border border-gray-50">
-           <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-orange-50 rounded-2xl p-4 text-center">
-                 <span className="block text-2xl font-bold text-gray-900">{durationMin}</span>
-                 <span className="text-xs font-medium text-orange-500 uppercase">Minutes</span>
-              </div>
-              <div className="bg-blue-50 rounded-2xl p-4 text-center">
-                 <span className="block text-2xl font-bold text-gray-900">{calories}</span>
-                 <span className="text-xs font-medium text-blue-500 uppercase">Calories</span>
-              </div>
+           <div className="text-center space-y-2">
+             <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tighter">Muito Bom!</h1>
+             <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">Treino Finalizado</p>
            </div>
            
-           <div className="text-center">
-             <p className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">Rate your workout</p>
-             <div className="flex justify-center gap-2">
-               {[1, 2, 3, 4, 5].map((star) => (
-                 <button 
-                  key={star} 
-                  onClick={() => { setRating(star); triggerHaptic('light'); }}
-                  className="transition-transform active:scale-125"
-                 >
-                   <Star 
-                     size={32} 
-                     fill={star <= rating ? "#FFC107" : "none"} 
-                     stroke={star <= rating ? "#FFC107" : "#E5E7EB"} 
-                     strokeWidth={2}
-                   />
-                 </button>
-               ))}
-             </div>
+           <div className="bg-gray-50 rounded-[2.5rem] p-8 w-full max-w-sm grid grid-cols-2 gap-4">
+              <div className="text-center">
+                 <p className="text-3xl font-black text-gray-900">{workout.calories}</p>
+                 <p className="text-[10px] font-black text-gray-400 uppercase">Kcal Queimadas</p>
+              </div>
+              <div className="text-center">
+                 <p className="text-3xl font-black text-gray-900">{workout.estimatedDurationMin}</p>
+                 <p className="text-[10px] font-black text-gray-400 uppercase">Minutos</p>
+              </div>
+           </div>
+
+           <div className="flex gap-2">
+             {[1, 2, 3, 4, 5].map(s => (
+               <Star key={s} size={32} className={clsx("transition-all", rating >= s ? "text-yellow-400 fill-yellow-400 scale-110" : "text-gray-200")} onClick={() => setRating(s)} />
+             ))}
            </div>
         </div>
 
         <button 
           onClick={() => navigate('/')} 
-          className="w-full max-w-sm bg-black text-white py-5 rounded-[1.5rem] font-bold text-lg flex items-center justify-center gap-2 shadow-lg shadow-gray-300 hover:bg-gray-800 transition-all active:scale-95"
+          className="w-full bg-black text-white py-6 rounded-[2.5rem] font-black text-lg shadow-xl shadow-black/20 mb-8"
         >
-          <Home size={20} /> Back to Home
+          Voltar ao Início
         </button>
       </div>
     );
   }
 
-  const isResting = phase === 'rest';
+  const progress = phase === 'rest' ? (timeLeft / (currentWorkoutExercise?.restSeconds || 30)) * 100 : 0;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900 relative">
-      {/* Background Image Area */}
-      <div className="absolute top-0 left-0 w-full h-[65%] z-0">
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/10 z-10"></div>
-        <img 
-          src={currentExerciseDetail.imageUrl} 
-          alt="Exercise" 
-          className="w-full h-full object-cover"
-        />
-        
-        {/* Top Controls */}
-        <div className="absolute top-0 left-0 w-full p-6 pt-12 flex justify-between items-center z-20 text-white">
-          <button onClick={() => navigate(-1)} className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/20 transition-colors">
-            <ChevronLeft size={24} />
+    <div className="h-screen flex flex-col bg-white overflow-hidden font-inter">
+      <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-8 relative">
+        <header className="absolute top-12 left-0 w-full px-8 flex justify-between items-center z-20">
+          <button onClick={() => navigate(-1)} className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+            <ChevronLeft size={24} className="text-gray-900" />
           </button>
-          <button 
-            onClick={goToExerciseDetail}
-            className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
-          >
-            <Info size={24} />
+          <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tiffany Way</h2>
+          <button className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+            <Info size={24} className="text-gray-900" />
           </button>
-        </div>
-      </div>
+        </header>
 
-      {/* Bottom Sheet Card */}
-      <div className="absolute bottom-0 left-0 w-full h-[45%] bg-white rounded-t-[2.5rem] z-30 flex flex-col px-8 pt-8 pb-8 shadow-[0_-10px_40px_rgba(0,0,0,0.2)]">
-        
-        {/* Handle bar for visual cue */}
-        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-8"></div>
-
-        <div className="flex justify-between items-start mb-4">
-           <div>
-             <h2 className="text-2xl font-bold text-gray-900 mb-1 leading-tight">{isResting ? 'Rest Time' : currentExerciseDetail.name}</h2>
-             <p className="text-gray-500 font-medium text-sm">
-                {isResting 
-                  ? 'Take a breath and recover' 
-                  : currentExerciseDetail.muscleGroup
-                }
-             </p>
-           </div>
-           <div className="flex flex-col items-end">
-             <span className="text-3xl font-bold text-gray-900 leading-none">
-               {currentExerciseIdx + 1}<span className="text-gray-400 text-lg font-medium">/{workout.exercises.length}</span>
-             </span>
-             <span className="text-xs text-gray-500 font-bold bg-gray-100 px-3 py-1 rounded-full mt-2 uppercase tracking-wide">
-               Set {currentSet} of {currentWorkoutExercise?.sets}
-             </span>
-           </div>
+        <div className="text-center">
+          <h1 className="text-3xl font-black text-gray-900 mb-2 leading-tight uppercase tracking-tighter">{workout.name}</h1>
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
+               <div className="h-full bg-black transition-all" style={{ width: `${((currentExerciseIdx + 1) / workout.exercises.length) * 100}%` }}></div>
+            </div>
+            <span className="text-[10px] font-black text-gray-400 uppercase">{currentExerciseIdx + 1} de {workout.exercises.length}</span>
+          </div>
         </div>
 
-        {/* Dynamic Content Area */}
-        <div className="flex-1 flex items-center justify-center py-2">
-           {isResting ? (
-             <div className="text-center w-full">
-                <div className="text-7xl font-bold text-gray-900 font-mono tracking-tighter tabular-nums mb-2">
-                  00:{timeLeft.toString().padStart(2, '0')}
-                </div>
-                <div className="flex items-center gap-2 justify-center text-orange-500 bg-orange-50 py-1 px-3 rounded-full inline-flex mx-auto">
-                  <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
-                  <span className="font-bold uppercase text-xs tracking-widest">Resting</span>
-                </div>
-             </div>
-           ) : (
-             <div className="flex w-full gap-4">
-                <div className="flex-1 bg-gray-50 border border-gray-100 rounded-3xl p-4 flex flex-col items-center justify-center">
-                   <span className="text-gray-400 font-bold text-xs uppercase mb-1">Weight</span>
-                   <span className="text-gray-900 font-bold text-2xl">{currentWorkoutExercise?.weightKg || 0} <span className="text-sm text-gray-400">kg</span></span>
-                </div>
-                <div className="flex-1 bg-gray-50 border border-gray-100 rounded-3xl p-4 flex flex-col items-center justify-center">
-                   <span className="text-gray-400 font-bold text-xs uppercase mb-1">Reps</span>
-                   <span className="text-gray-900 font-bold text-2xl">{currentWorkoutExercise?.reps}</span>
-                </div>
-             </div>
-           )}
-        </div>
-
-        {/* Main Action Button */}
-        <div className="mt-auto pt-4">
-          {isResting ? (
-            <button 
-              onClick={skipRest}
-              className="w-full bg-black text-white py-5 rounded-[1.8rem] font-bold text-lg flex items-center justify-center gap-3 hover:bg-gray-800 transition-colors active:scale-98"
-            >
-              Skip Rest <SkipForward size={22} />
-            </button>
-          ) : (
-             <button 
-               onClick={handleFinishSet}
-               className="w-full bg-[#000] text-white py-5 rounded-[1.8rem] font-bold text-lg flex items-center justify-center gap-3 hover:bg-gray-800 transition-colors active:scale-98 shadow-lg shadow-gray-200"
-             >
-               Complete Set <CheckCircle size={22} />
-             </button>
+        <div className="relative w-72 h-72 flex items-center justify-center">
+          <svg className="absolute inset-0 w-full h-full -rotate-90">
+             <circle cx="144" cy="144" r="130" stroke="#F2F4F8" strokeWidth="6" fill="transparent" />
+             <circle 
+                cx="144" cy="144" r="130" stroke="black" strokeWidth="6" fill="transparent"
+                strokeDasharray="816.8" 
+                strokeDashoffset={816.8 - (816.8 * (phase === 'rest' ? progress : 100) / 100)}
+                className="transition-all duration-1000 ease-linear"
+             />
+          </svg>
+          
+          <div className="relative z-10 w-full h-full p-10">
+             <img 
+               src={currentExerciseDetail.imageUrl} 
+               alt="Exercício" 
+               className="w-full h-full object-cover rounded-full shadow-2xl"
+             />
+          </div>
+          
+          {phase === 'rest' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm rounded-full animate-in fade-in zoom-in">
+              <span className="text-xs font-black text-gray-400 uppercase mb-1 tracking-widest">Descanso</span>
+              <span className="text-6xl font-black text-gray-900 tabular-nums">00:{timeLeft.toString().padStart(2, '0')}</span>
+            </div>
           )}
         </div>
 
+        <div className="text-center max-w-xs">
+           <h3 className="text-2xl font-black text-gray-900 mb-2 uppercase tracking-tighter">{currentExerciseDetail.name}</h3>
+           <p className="text-[11px] font-bold text-gray-400 uppercase leading-relaxed tracking-tight">
+             Foco na contração muscular e controle do movimento. Mantenha a postura.
+           </p>
+        </div>
+      </div>
+
+      <div className="p-8 pb-12 bg-white flex flex-col space-y-6">
+        <div className="flex items-center justify-between px-2">
+           <div className="flex flex-col">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Calorias</span>
+              <div className="flex items-center gap-1.5">
+                <Flame size={16} className="text-orange-500" fill="currentColor" />
+                <span className="text-xl font-black text-gray-900">{workout.calories} kcal</span>
+              </div>
+           </div>
+           
+           <div className="flex items-center gap-3">
+              <div className="bg-gray-50 px-5 py-3 rounded-2xl flex flex-col items-center">
+                <span className="text-[9px] font-black text-gray-400 uppercase mb-1">Séries</span>
+                <span className="text-sm font-black text-gray-900">{currentSet}/{currentWorkoutExercise?.sets}</span>
+              </div>
+              <div className="bg-gray-50 px-5 py-3 rounded-2xl flex flex-col items-center">
+                <span className="text-[9px] font-black text-gray-400 uppercase mb-1">Reps</span>
+                <span className="text-sm font-black text-gray-900">{currentWorkoutExercise?.reps}</span>
+              </div>
+           </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button className="flex-1 bg-black text-white h-20 rounded-[2.5rem] font-black text-lg flex items-center justify-center shadow-xl shadow-black/20 active:scale-95 transition-all uppercase tracking-widest" onClick={phase === 'rest' ? skipRest : handleFinishSet}>
+            {phase === 'rest' ? 'Pular Descanso' : 'Concluir Série'}
+          </button>
+          <button className="w-20 h-20 bg-gray-100 text-gray-900 rounded-full flex items-center justify-center active:scale-95 transition-all">
+             <Pause size={28} fill="currentColor" />
+          </button>
+        </div>
       </div>
     </div>
   );

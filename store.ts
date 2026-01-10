@@ -1,6 +1,7 @@
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { User, Workout, Exercise, WorkoutSession, Assessment } from './types';
+import { User, Workout, Exercise, WorkoutSession, Assessment, Message, Badge } from './types';
 
 interface AppState {
   currentUser: User | null;
@@ -9,108 +10,118 @@ interface AppState {
   exercises: Exercise[];
   sessions: WorkoutSession[];
   assessments: Assessment[];
+  messages: Message[];
   
   setCurrentUser: (user: User | null) => void;
   addSession: (session: WorkoutSession) => void;
-  toggleUserRole: () => void; // Demo utility
+  toggleUserRole: () => void;
+  sendMessage: (text: string) => void;
+  createWorkout: (workout: Workout) => void;
+  addAssessment: (assessment: Omit<Assessment, 'bmi' | 'leanMass'>) => void;
 }
 
-// Initial Mock Data
-const MOCK_EXERCISES: Exercise[] = [
-  { id: '1', name: 'Snake Pose', description: 'Sarpasana in Sanskrit', muscleGroup: 'Costas', imageUrl: 'https://images.unsplash.com/photo-1544367563-12123d8965cd?q=80&w=800&auto=format&fit=crop' },
-  { id: '2', name: 'Agachamento Livre', description: 'Pés na largura dos ombros', muscleGroup: 'Pernas', imageUrl: 'https://images.unsplash.com/photo-1574680096141-1cddd32e04ca?q=80&w=800&auto=format&fit=crop' },
-  { id: '3', name: 'Warrior Pose', description: 'Virabhadrasana', muscleGroup: 'Corpo Todo', imageUrl: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=800&auto=format&fit=crop' },
-  { id: '4', name: 'Rosca Direta', description: 'Barra W', muscleGroup: 'Bíceps', imageUrl: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=800&auto=format&fit=crop' },
+const MOCK_BADGES: Badge[] = [
+  { id: 'b1', name: 'Early Bird', icon: '🌅', description: 'Treinou antes das 8h', earnedAt: '2023-10-10' },
+  { id: 'b2', name: 'On Fire', icon: '🔥', description: '3 dias seguidos', earnedAt: '2023-10-12' },
 ];
 
-const MOCK_WORKOUTS: Workout[] = [
-  {
-    id: 'w1',
-    trainerId: 't1',
-    name: 'Yoga Group',
-    description: 'Focus on flexibility and breathing.',
-    estimatedDurationMin: 60,
-    category: 'yoga',
-    difficulty: 'Medium',
-    calories: 250,
-    startTime: '14:00-15:00',
-    location: 'A5 room',
-    exercises: [
-      { id: 'we1', exerciseId: '1', sets: 3, reps: 1, restSeconds: 30, weightKg: 0, order: 1 },
-      { id: 'we2', exerciseId: '3', sets: 3, reps: 1, restSeconds: 30, weightKg: 0, order: 2 },
-    ]
-  },
-  {
-    id: 'w2',
-    trainerId: 't1',
-    name: 'Balance',
-    description: 'Core stability and balance.',
-    estimatedDurationMin: 45,
-    category: 'balance',
-    difficulty: 'Light',
-    calories: 180,
-    startTime: '18:00-19:30',
-    location: 'A2 room',
-    exercises: [
-      { id: 'we4', exerciseId: '3', sets: 4, reps: 1, restSeconds: 45, weightKg: 0, order: 1 },
-    ]
-  },
-  {
-    id: 'w3',
-    trainerId: 't1',
-    name: 'Power Start',
-    description: 'High intensity cardio.',
-    estimatedDurationMin: 30,
-    category: 'cardio',
-    difficulty: 'Hard',
-    calories: 400,
-    startTime: '07:00-07:30',
-    location: 'Gym B',
-    exercises: [
-      { id: 'we5', exerciseId: '2', sets: 4, reps: 15, restSeconds: 60, weightKg: 0, order: 1 },
-    ]
-  }
-];
+const GYM_EXERCISES: Exercise[] = [
+  // PEITO
+  { id: 'ex-p1', name: 'Supino Reto (Barra)', description: 'O exercício base para o peitoral maior. Mantenha os pés firmes e a escápula retraída.', muscleGroup: 'Peitoral', imageUrl: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?q=80&w=800' },
+  { id: 'ex-p2', name: 'Chest Press Machine', description: 'Excelente para isolar o peito com segurança mecânica. Controle a fase excêntrica.', muscleGroup: 'Peitoral', imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=800' },
+  { id: 'ex-p3', name: 'Crucifixo no Peck Deck', description: 'Isolamento total de peitoral com foco no miolo do peito.', muscleGroup: 'Peitoral', imageUrl: 'https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?q=80&w=800' },
+  
+  // COSTAS
+  { id: 'ex-c1', name: 'Puxada Aberta (Lat Pulldown)', description: 'Foco na largura das costas (Latíssimo do dorso). Não balance o tronco.', muscleGroup: 'Costas', imageUrl: 'https://images.unsplash.com/photo-1605296867304-46d5465a13f1?q=80&w=800' },
+  { id: 'ex-c2', name: 'Remada Sentada (Cabo)', description: 'Trabalha a densidade das costas e trapézio médio/inferior.', muscleGroup: 'Costas', imageUrl: 'https://images.unsplash.com/photo-1590487988256-9ed24133863e?q=80&w=800' },
+  
+  // PERNAS
+  { id: 'ex-l1', name: 'Leg Press 45°', description: 'Poderoso para quadríceps e glúteos. Não bloqueie os joelhos no topo.', muscleGroup: 'Pernas', imageUrl: 'https://images.unsplash.com/photo-1591940742878-13aba4b7a35e?q=80&w=800' },
+  { id: 'ex-l2', name: 'Cadeira Extensora', description: 'Isolamento de quadríceps. Ideal para definição e pico de contração.', muscleGroup: 'Pernas', imageUrl: 'https://images.unsplash.com/photo-1574680096145-b5ef050c2e1e?q=80&w=800' },
+  { id: 'ex-l3', name: 'Mesa Flexora', description: 'Foco nos posteriores de coxa (isquiotibiais).', muscleGroup: 'Pernas', imageUrl: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=800' },
 
-const MOCK_USERS: User[] = [
-  { id: 't1', name: 'Tiffany Way', email: 'tiffany@fit.com', type: 'trainer', avatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?q=80&w=200&auto=format&fit=crop', location: 'Copenhagen, DK' },
-  { id: 's1', name: 'Sandra Glam', email: 'sandra@fit.com', type: 'student', avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop', location: 'Denmark, Copenhagen' }
-];
+  // OMBROS
+  { id: 'ex-s1', name: 'Desenvolvimento Shoulder Press', description: 'Exercício principal para ombros. Pode ser feito com halteres ou máquina.', muscleGroup: 'Ombros', imageUrl: 'https://images.unsplash.com/photo-1532384748853-8f54a8f476e2?q=80&w=800' },
+  { id: 'ex-s2', name: 'Elevação Lateral', description: 'Foco no deltoide lateral para dar largura aos ombros.', muscleGroup: 'Ombros', imageUrl: 'https://images.unsplash.com/photo-1583454110551-21f2fa2ec617?q=80&w=800' },
 
-const MOCK_ASSESSMENTS: Assessment[] = [
-  { date: '2023-01-01', weight: 85, bodyFat: 22 },
-  { date: '2023-02-01', weight: 83, bodyFat: 20 },
-  { date: '2023-03-01', weight: 81, bodyFat: 18 },
-  { date: '2023-04-01', weight: 80, bodyFat: 17 },
+  // BRAÇOS
+  { id: 'ex-b1', name: 'Rosca Direta (Cabo)', description: 'Tensão constante no bíceps durante todo o movimento.', muscleGroup: 'Braços', imageUrl: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=800' },
+  { id: 'ex-b2', name: 'Tríceps Pulley (Corda)', description: 'Ótimo para trabalhar a porção lateral e longa do tríceps.', muscleGroup: 'Braços', imageUrl: 'https://images.unsplash.com/photo-1590487988256-9ed24133863e?q=80&w=800' },
 ];
 
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      currentUser: MOCK_USERS[1], 
-      users: MOCK_USERS,
-      workouts: MOCK_WORKOUTS,
-      exercises: MOCK_EXERCISES,
+      currentUser: { id: 's1', name: 'Sandra Glam', email: 'sandra@fit.com', type: 'student', avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200', location: 'São Paulo, SP', badges: MOCK_BADGES },
+      users: [
+        { id: 't1', name: 'Tiffany Way', email: 'tiffany@fit.com', type: 'trainer', avatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?q=80&w=200', location: 'Copenhagen, DK', badges: [] },
+        { id: 's1', name: 'Sandra Glam', email: 'sandra@fit.com', type: 'student', avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200', location: 'São Paulo, SP', badges: MOCK_BADGES }
+      ],
+      workouts: [
+        {
+          id: 'w-hiit',
+          trainerId: 't1',
+          name: 'Super Peitoral',
+          description: 'Treino de alta intensidade focado em máquinas.',
+          estimatedDurationMin: 45,
+          category: 'strength',
+          difficulty: 'Hard',
+          calories: 500,
+          exercises: [
+            { id: 'we1', exerciseId: 'ex-p1', sets: 4, reps: 10, restSeconds: 90, weightKg: 60, order: 1 },
+            { id: 'we2', exerciseId: 'ex-p2', sets: 3, reps: 12, restSeconds: 60, weightKg: 40, order: 2 },
+          ]
+        }
+      ],
+      exercises: GYM_EXERCISES,
       sessions: [],
-      assessments: MOCK_ASSESSMENTS,
+      assessments: [],
+      messages: [],
 
       setCurrentUser: (user) => set({ currentUser: user }),
       
       addSession: (session) => set((state) => ({ 
-        sessions: [session, ...state.sessions] 
+        sessions: [...state.sessions, session] 
       })),
 
-      toggleUserRole: () => {
-        const current = get().currentUser;
-        if (current?.type === 'student') {
-          set({ currentUser: MOCK_USERS[0] });
-        } else {
-          set({ currentUser: MOCK_USERS[1] });
-        }
-      }
+      toggleUserRole: () => set((state) => {
+        const nextUser = state.currentUser?.type === 'student' ? state.users[0] : state.users[1];
+        return { currentUser: nextUser };
+      }),
+
+      sendMessage: (text) => set((state) => {
+        if (!state.currentUser) return {};
+        const receiverId = state.currentUser.id === 't1' ? 's1' : 't1';
+        const newMessage: Message = {
+          id: Math.random().toString(36).substr(2, 9),
+          senderId: state.currentUser.id,
+          receiverId,
+          text,
+          timestamp: new Date().toISOString(),
+          isRead: false
+        };
+        return { messages: [...state.messages, newMessage] };
+      }),
+
+      createWorkout: (workout) => set((state) => ({
+        workouts: [...state.workouts, workout]
+      })),
+
+      addAssessment: (assessmentData) => set((state) => {
+        const heightM = assessmentData.height / 100;
+        const bmi = parseFloat((assessmentData.weight / (heightM * heightM)).toFixed(1));
+        const leanMass = parseFloat((assessmentData.weight * (1 - assessmentData.bodyFat / 100)).toFixed(1));
+        const newAssessment: Assessment = {
+          ...assessmentData,
+          bmi,
+          leanMass,
+          id: Math.random().toString(36).substr(2, 9)
+        };
+        return { assessments: [...state.assessments, newAssessment] };
+      }),
     }),
     {
-      name: 'treinos-pt-storage',
+      name: 'fitness-pro-unified-v3',
     }
   )
 );

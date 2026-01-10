@@ -1,7 +1,5 @@
 {
-  "name": "Treinos PT - PWA System",
-  "description": "Progressive Web App for Personal Trainers and Students. Features offline tracking, precise timers, and workout management.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
+  "name": "Fitness Pro Unified",
+  "description": "Plataforma completa para personal trainers gerenciarem alunos, treinos e progresso.",
+  "requestFramePermissions": []
 }
